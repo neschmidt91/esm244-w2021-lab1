@@ -1,0 +1,123 @@
+---
+title: "Lab 1"
+author: "Nicole Schmidt"
+date: "1/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#attach packages 
+
+library(tidyverse)
+library(here)
+library(dplyr)
+library(tmap)
+library(sf)
+
+sf_trees <- read_csv(here("data", "sf_trees", "sf_trees.csv"))
+
+```
+
+### Basic wrangling reminders
+
+Refresh some skills for data wrangling & summary statistics using functions in the `dplyr` package 
+
+Find the top 5 highest observations of trees by legal_status. Do some wrangling, make a graph. 
+```{r}
+top_5_status <- sf_trees %>% 
+  count(legal_status) %>% #count function is recognizing groups, finding counts, and puts it in a nice table (takes group by, summarise, n and uses all of it). Can have multiple levels of grouping as well. 
+drop_na(legal_status) %>% #removes missing values; careful when doing this bc can be problematic.
+rename(tree_count = n) %>%  # new name replaces old name
+relocate(tree_count) %>% 
+#allows you to move things around by class (character or class) or location, or columns) 
+  slice_max(tree_count, n = 5)
+```
+
+Make a graph of those top 5 observations by legal status. 
+```{r}
+ggplot(data = top_5_status, aes(x = fct_reorder(legal_status, tree_count), y = tree_count))+
+  geom_col()+
+  labs(x = "Legal Status", y = "Tree Count")+
+  coord_flip()+
+  theme_minimal()
+
+```
+
+### A few more data wrangling refresher examples 
+
+Only want to keep observations (rows) for Blackwood Acacia Trees
+
+```{r}
+blackwood_acacia <- sf_trees %>% 
+  filter(str_detect(species, "Blackwood Acacia")) %>% #filter to keep observations if within the species variable the string is detected where that stric is x. not looking for a complete exact match but only looking for an observation where that string shows up. 
+select(legal_status, date, latitude, longitude)
+
+ggplot(data = blackwood_acacia, aes( x = longitude, y = latitude))+
+  geom_point()
+```
+
+### tidyr::seperate() and unite() functions
+
+Useful for combining or seperating columns 
+
+```{r}
+sf_trees_sep <- sf_trees %>% 
+  separate(species, into = c("spp_scientific", "spp_common"), sep = "::")
+```
+
+Example: tidyr::unite()
+
+```{r}
+sf_trees_unite <- sf_trees %>% 
+  unite("id_status", tree_id:legal_status, sep = "_cool!_")
+```
+
+###Make some actual Maps of blackwood acacia trees in SF 
+
+`st_as_as()` to convert latitude and longitude to spatial coordinates.
+
+```{r}
+blackwood_acacia_sp <- blackwood_acacia %>% 
+  drop_na(longitude, latitude) %>% 
+  st_as_sf(coords = c("longitude", "latitude"))
+
+st_crs(blackwood_acacia_sp) = 4326 #sets coordinate reference system 
+
+#graph using geom_sf
+ggplot(data = blackwood_acacia_sp) +
+  geom_sf(color = "darkgreen")
+
+```
+
+
+###Read in SF roads shapefile
+
+```{r}
+sf_map <- read_sf(here("data", "sf_map", "tl_2017_06075_roads.shp")) # read in spatial shapfile 
+
+st_transform(sf_map, 4326) # data will have same coordinate reference system 
+
+ggplot(data = sf_map)+
+  geom_sf()
+```
+
+
+Combine blackwood acacia tree observations and SF roads map
+
+```{r}
+ggplot()+
+  geom_sf(data = sf_map, size = 0.1, color = "darkgray")+
+  geom_sf(data = blackwood_acacia_sp, color = "red", size = 0.5)+
+  theme_void()
+```
+
+now interactive map!!!
+```{r}
+tmap_mode("view")
+
+tm_shape(blackwood_acacia_sp)+
+  tm_dots()
+```
+
